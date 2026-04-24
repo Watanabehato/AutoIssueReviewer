@@ -12,10 +12,12 @@ CONFIG_FILE_NAME = ".autoissue.json"
 
 @dataclass
 class Config:
-    # AI API 配置
+    # AI API 配置（支持多 key/多模型，自动切换）
     api_base_url: str = "https://api.openai.com/v1"
-    api_key: str = ""
-    model: str = "gpt-4o"
+    api_key: str = ""                    # 兼容单 key
+    api_keys: list = field(default_factory=list)  # 多 key 列表，优先级高于 api_key
+    model: str = "gpt-4o"                # 兼容单模型
+    models: list = field(default_factory=list)      # 多模型列表，优先级高于 model
     max_tokens: int = 4096
 
     # 代码审查配置
@@ -65,6 +67,29 @@ def load_config(config_path: Optional[str] = None) -> Config:
         except Exception as e:
             print(f"[警告] 读取配置文件 {loaded_path} 失败：{e}")
 
+    # 处理多 key 和多模型的兼容逻辑
+    # api_keys: 支持直接传列表，或传逗号分隔的字符串
+    raw_keys = cfg.api_keys
+    if isinstance(raw_keys, str):
+        cfg.api_keys = [k.strip() for k in raw_keys.split(",") if k.strip()]
+    elif not isinstance(raw_keys, list):
+        cfg.api_keys = []
+
+    # 兼容旧的单 key 配置
+    if not cfg.api_keys and cfg.api_key:
+        cfg.api_keys = [cfg.api_key]
+
+    # models: 支持直接传列表，或传逗号分隔的字符串
+    raw_models = cfg.models
+    if isinstance(raw_models, str):
+        cfg.models = [m.strip() for m in raw_models.split(",") if m.strip()]
+    elif not isinstance(raw_models, list):
+        cfg.models = []
+
+    # 兼容旧的单模型配置
+    if not cfg.models and cfg.model:
+        cfg.models = [cfg.model]
+
     # 环境变量覆盖（优先级最高）
     if os.environ.get("OPENAI_API_KEY"):
         cfg.api_key = os.environ["OPENAI_API_KEY"]
@@ -80,6 +105,10 @@ def generate_sample_config() -> str:
     """生成示例配置文件内容"""
     sample = {
         "api_base_url": "https://your-api-proxy.com/v1",
+        # 支持多 key/多模型，自动切换（任一 key 报错则尝试下一个）
+        "api_keys": ["sk-key1-xxxxxxxxxxxxxxxx", "sk-key2-xxxxxxxxxxxxxxxx"],
+        "models": ["gpt-4o", "claude-haiku-4-5-20251001"],
+        # 兼容单 key/单模型写法（会被合并到 api_keys/models 中）
         "api_key": "sk-xxxxxxxxxxxxxxxx",
         "model": "gpt-4o",
         "max_tokens": 4096,
