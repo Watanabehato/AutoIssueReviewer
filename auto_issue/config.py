@@ -1,0 +1,99 @@
+"""配置管理模块：从配置文件和环境变量加载配置"""
+
+import os
+import json
+from pathlib import Path
+from dataclasses import dataclass, field
+from typing import Optional
+
+
+CONFIG_FILE_NAME = ".autoissue.json"
+
+
+@dataclass
+class Config:
+    # AI API 配置
+    api_base_url: str = "https://api.openai.com/v1"
+    api_key: str = ""
+    model: str = "gpt-4o"
+    max_tokens: int = 4096
+
+    # 代码审查配置
+    review_language: str = "zh"          # 审查结果语言：zh=中文，en=英文
+    exclude_patterns: list = field(default_factory=lambda: [
+        "*.lock", "*.sum", "*.min.js", "*.min.css",
+        "node_modules/*", ".git/*", "dist/*", "build/*",
+        "*.png", "*.jpg", "*.jpeg", "*.gif", "*.ico",
+        "*.pdf", "*.zip", "*.tar", "*.gz",
+        "__pycache__/*", "*.pyc", "*.pyo",
+        ".venv/*", "venv/*", "env/*",
+    ])
+    max_file_size_kb: int = 200          # 超过此大小的文件跳过
+    max_files_per_batch: int = 10        # 每批发送给 AI 的文件数
+    max_repo_files: int = 200            # 最多处理的文件数
+    batch_delay_seconds: float = 5.0     # 相邻批次之间的等待秒数（防止 API 限流）
+
+    # Issue 配置
+    issue_title_prefix: str = "[AutoReview]"
+    issue_labels: list = field(default_factory=lambda: ["automated-review"])
+    add_summary: bool = True             # 是否在 Issue 头部加总结
+
+
+def load_config(config_path: Optional[str] = None) -> Config:
+    """加载配置，优先级：命令行指定文件 > 当前目录 > HOME 目录 > 默认值"""
+    cfg = Config()
+
+    search_paths = []
+    if config_path:
+        search_paths.append(Path(config_path))
+    search_paths.append(Path.cwd() / CONFIG_FILE_NAME)
+    search_paths.append(Path.home() / CONFIG_FILE_NAME)
+
+    loaded_path = None
+    for p in search_paths:
+        if p.exists():
+            loaded_path = p
+            break
+
+    if loaded_path:
+        try:
+            with open(loaded_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            for k, v in data.items():
+                if hasattr(cfg, k):
+                    setattr(cfg, k, v)
+        except Exception as e:
+            print(f"[警告] 读取配置文件 {loaded_path} 失败：{e}")
+
+    # 环境变量覆盖（优先级最高）
+    if os.environ.get("OPENAI_API_KEY"):
+        cfg.api_key = os.environ["OPENAI_API_KEY"]
+    if os.environ.get("OPENAI_API_BASE"):
+        cfg.api_base_url = os.environ["OPENAI_API_BASE"]
+    if os.environ.get("AUTOISSUE_MODEL"):
+        cfg.model = os.environ["AUTOISSUE_MODEL"]
+
+    return cfg
+
+
+def generate_sample_config() -> str:
+    """生成示例配置文件内容"""
+    sample = {
+        "api_base_url": "https://your-api-proxy.com/v1",
+        "api_key": "sk-xxxxxxxxxxxxxxxx",
+        "model": "gpt-4o",
+        "max_tokens": 4096,
+        "review_language": "zh",
+        "exclude_patterns": [
+            "*.lock", "node_modules/*", ".git/*", "dist/*",
+            "*.png", "*.jpg", "__pycache__/*", "*.pyc"
+        ],
+        "max_file_size_kb": 200,
+        "max_files_per_batch": 10,
+        "max_repo_files": 200,
+        "batch_delay_seconds": 5.0,
+        "issue_title_prefix": "[AutoReview]",
+        "issue_labels": ["automated-review"],
+        "add_summary": True
+    }
+    return json.dumps(sample, ensure_ascii=False, indent=2)

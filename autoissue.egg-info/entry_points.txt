@@ -1,0 +1,2 @@
+[console_scripts]
+autoissue = auto_issue.cli:main

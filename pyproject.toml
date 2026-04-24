@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "autoissue"
+version = "1.0.0"
+description = "AI 驱动的 GitHub 代码审查 CLI 工具，自动审查仓库代码并提交 Issue"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+keywords = ["code-review", "github", "ai", "cli", "openai"]
+dependencies = [
+    "openai>=1.0.0",
+]
+
+[project.scripts]
+autoissue = "auto_issue.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["auto_issue*"]
