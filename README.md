@@ -19,7 +19,7 @@
 ```bash
 # 克隆本项目
 git clone https://github.com/Watanabehato/AutoIssueReviewer
-cd autoissue
+cd AutoIssueReviewer
 
 # 安装（推荐使用虚拟环境）
 pip install -e .
