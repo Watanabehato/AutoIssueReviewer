@@ -1,6 +1,7 @@
-"""AI 代码审查模块：调用 OpenAI 兼容 API 对代码进行审查"""
+"""AI 代码审查模块：调用 OpenAI 兼容 API 对代码进行审查，支持多 key/多模型自动切换"""
 
 import time
+import itertools
 from typing import Optional
 from openai import OpenAI, APIError, RateLimitError, APIConnectionError
 
@@ -82,62 +83,121 @@ Output format: Pure Markdown, suitable for use as a GitHub Issue body."""
 class CodeReviewer:
     def __init__(self, config: Config):
         self.config = config
-        self.client = OpenAI(
-            api_key=config.api_key,
-            base_url=config.api_base_url,
-        )
         self.lang = config.review_language
 
-    def _chat(self, system: str, user: str, retries: int = 5) -> str:
-        """调用 Chat API，带自动重试"""
-        for attempt in range(retries):
-            try:
-                response = self.client.chat.completions.create(
-                    model=self.config.model,
-                    messages=[
-                        {"role": "system", "content": system},
-                        {"role": "user", "content": user},
-                    ],
-                    max_tokens=self.config.max_tokens,
-                    temperature=0.2,
-                )
-                return response.choices[0].message.content.strip()
-            except RateLimitError:
-                wait = 2 ** attempt * 10
-                print(f"  [限流] 等待 {wait}s 后重试...")
-                time.sleep(wait)
-            except APIConnectionError as e:
-                if attempt < retries - 1:
-                    print(f"  [连接错误] {e}，5s 后重试...")
-                    time.sleep(5)
-                else:
-                    raise
-            except APIError as e:
-                # 从错误响应中提取 retry_after 秒数
-                retry_after = getattr(e, "response", None) and getattr(e.response, "headers", None) and \
-                              e.response.headers.get("retry-after")
-                if retry_after:
-                    wait = int(retry_after)
-                else:
-                    wait = 2 ** attempt * 30   # 指数退避：30s / 60s / 120s / 240s / 480s
+        # 构建 (api_key, model) 组合列表
+        keys = config.api_keys if config.api_keys else [config.api_key]
+        models = config.models if config.models else [config.model]
 
-                if attempt < retries - 1:
-                    # 尝试提取有意义的错误信息，兼容 dict/str 等各种 body 类型
-                    body = getattr(e, "body", None)
-                    if isinstance(body, dict):
-                        err_msg = body.get("detail") or body.get("message") or str(body)
-                    elif isinstance(body, str):
-                        err_msg = body
-                    else:
-                        err_msg = str(body) if body else str(e)
-                    print(f"  [API 错误 {getattr(e, 'status_code', '?')}] "
-                          f"{err_msg[:100]}，{wait}s 后重试...")
+        # 去重并保持顺序
+        seen = set()
+        self._model_pool = []
+        for k, m in itertools.product(keys, models):
+            if (k, m) not in seen:
+                seen.add((k, m))
+                self._model_pool.append((k, m))
+
+        if len(self._model_pool) == 1:
+            (k, m) = self._model_pool[0]
+            self.client = OpenAI(api_key=k, base_url=config.api_base_url)
+            self._model_iter = None
+        else:
+            self._model_iter = itertools.cycle(self._model_pool)
+            # 取第一个
+            k, m = next(self._model_iter)
+            self.client = OpenAI(api_key=k, base_url=config.api_base_url)
+
+        self._current_key = keys[0] if keys else ""
+        self._current_model = models[0] if models else config.model
+        self._total_models = len(self._model_pool)
+
+    def _switch_model(self) -> None:
+        """切换到下一个模型组合"""
+        if self._model_iter:
+            k, m = next(self._model_iter)
+            self.client = OpenAI(api_key=k, base_url=self.config.api_base_url)
+            self._current_key = k
+            self._current_model = m
+
+    def _chat(self, system: str, user: str, retries: int = 5) -> str:
+        """调用 Chat API，带自动重试和多模型切换"""
+        model_desc = f"{self._current_model}" if self._total_models == 1 else \
+                     f"{self._current_model} ({self._current_key[:8]}...)"
+
+        for model_retry in range(self._total_models):
+            for attempt in range(retries):
+                try:
+                    response = self.client.chat.completions.create(
+                        model=self._current_model,
+                        messages=[
+                            {"role": "system", "content": system},
+                            {"role": "user", "content": user},
+                        ],
+                        max_tokens=self.config.max_tokens,
+                        temperature=0.2,
+                    )
+                    return response.choices[0].message.content.strip()
+                except RateLimitError:
+                    wait = 2 ** attempt * 10
+                    print(f"  [限流] {model_desc} 等待 {wait}s 后重试...")
                     time.sleep(wait)
-                else:
-                    raise RuntimeError(
-                        f"API 调用失败（已重试 {retries} 次）：{err_msg[:200]}"
-                    ) from e
-        raise RuntimeError("超过最大重试次数")
+                except APIConnectionError as e:
+                    if attempt < retries - 1:
+                        print(f"  [连接错误] {model_desc} {e}，5s 后重试...")
+                        time.sleep(5)
+                    else:
+                        print(f"  [连接错误] {model_desc} 重试耗尽，尝试切换模型...")
+                        break
+                except APIError as e:
+                    # 从错误响应中提取 retry_after 秒数
+                    retry_after = getattr(e, "response", None) and getattr(e.response, "headers", None) and \
+                                  e.response.headers.get("retry-after")
+                    if retry_after:
+                        wait = int(retry_after)
+                    else:
+                        wait = 2 ** attempt * 30   # 指数退避
+
+                    # 判断是否为不可重试的错误（如 401/403/404）
+                    status = getattr(e, "status_code", None)
+                    no_retry = status in (401, 403, 404)
+
+                    if no_retry or attempt >= retries - 1:
+                        # 提取错误信息
+                        body = getattr(e, "body", None)
+                        if isinstance(body, dict):
+                            err_msg = body.get("detail") or body.get("message") or str(body)
+                        elif isinstance(body, str):
+                            err_msg = body
+                        else:
+                            err_msg = str(body) if body else str(e)
+
+                        if no_retry:
+                            print(f"  [API 错误 {status}] {model_desc} {err_msg[:80]}，尝试切换模型...")
+                        else:
+                            print(f"  [API 错误 {status}] {model_desc} {err_msg[:80]}，重试耗尽，尝试切换模型...")
+                        break
+                    else:
+                        body = getattr(e, "body", None)
+                        if isinstance(body, dict):
+                            err_msg = body.get("detail") or body.get("message") or str(body)
+                        elif isinstance(body, str):
+                            err_msg = body
+                        else:
+                            err_msg = str(body) if body else str(e)
+                        print(f"  [API 错误 {status}] {model_desc} {err_msg[:100]}，{wait}s 后重试...")
+                        time.sleep(wait)
+            else:
+                # 内层 for 循环完整执行（break 跳出时 else 不执行）
+                continue
+            # break 跳到这里，切换模型继续
+            if model_retry < self._total_models - 1:
+                self._switch_model()
+                model_desc = f"{self._current_model} ({self._current_key[:8]}...)"
+                print(f"  [切换模型] -> {model_desc}")
+                continue
+            break
+
+        raise RuntimeError(f"所有 {self._total_models} 个模型组合均失败")
 
     def _format_files_for_prompt(self, files: list[CodeFile]) -> str:
         """将文件列表格式化为 Prompt 中的代码块"""
@@ -225,6 +285,11 @@ class CodeReviewer:
 
         if total == 0:
             return "未找到可审查的代码文件。", []
+
+        # 显示使用的模型信息
+        if self._total_models > 1:
+            model_list = " / ".join(f"{m}" for (k, m) in self._model_pool)
+            print(f"  [模型] {model_list}（自动切换）")
 
         batch_reviews = []
         for i, batch in enumerate(batches, 1):

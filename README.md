@@ -45,6 +45,28 @@ autoissue init
 }
 ```
 
+#### 多 Key / 多模型支持
+
+当配置多个 `api_keys` 和 `models` 时，AutoIssue 会自动切换：
+- 任一 key 或模型报错（如 401/403/504 等）时，自动切换到下一个组合
+- 组合循环：每个 key 会和每个模型配对
+
+```json
+{
+  "api_base_url": "https://cdnapi.xcode.best/v1",
+  "api_keys": [
+    "sk-key1-xxxxxxxxxxxxxxxx",
+    "sk-key2-xxxxxxxxxxxxxxxx"
+  ],
+  "models": [
+    "claude-haiku-4-5-20251001",
+    "gpt-4o-mini"
+  ]
+}
+```
+
+此配置会生成 4 种组合：`(key1, claude)` / `(key1, gpt-4o-mini)` / `(key2, claude)` / `(key2, gpt-4o-mini)`
+
 ### 3. 检查环境
 
 ```bash
@@ -74,14 +96,17 @@ autoissue review owner/repo --branch develop
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
 | `api_base_url` | `https://api.openai.com/v1` | API 中转站地址 |
-| `api_key` | *(必填)* | API Key |
-| `model` | `gpt-4o` | 使用的模型 |
+| `api_key` | *(必填)* | API Key（兼容单 key） |
+| `api_keys` | `[]` | 多 Key 列表，支持逗号分隔字符串，自动切换 |
+| `model` | `gpt-4o` | 模型（兼容单模型） |
+| `models` | `[]` | 多模型列表，支持逗号分隔字符串，自动切换 |
 | `max_tokens` | `4096` | 每次 API 调用最大 token 数 |
 | `review_language` | `zh` | 审查语言：`zh`=中文，`en`=英文 |
 | `exclude_patterns` | *(见默认值)* | 排除的文件 glob 模式列表 |
 | `max_file_size_kb` | `200` | 超过此大小的文件跳过（KB） |
 | `max_files_per_batch` | `10` | 每批发给 AI 的文件数 |
 | `max_repo_files` | `200` | 最多处理的文件总数 |
+| `batch_delay_seconds` | `5.0` | 相邻批次之间的等待秒数 |
 | `issue_title_prefix` | `[AutoReview]` | Issue 标题前缀 |
 | `issue_labels` | `["automated-review"]` | Issue 标签（需提前在仓库创建） |
 | `add_summary` | `true` | 是否在 Issue 头部加总结 |
