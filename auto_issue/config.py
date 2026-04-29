@@ -93,10 +93,12 @@ def load_config(config_path: Optional[str] = None) -> Config:
     # 环境变量覆盖（优先级最高）
     if os.environ.get("OPENAI_API_KEY"):
         cfg.api_key = os.environ["OPENAI_API_KEY"]
+        cfg.api_keys = [cfg.api_key]  # 同步更新列表
     if os.environ.get("OPENAI_API_BASE"):
         cfg.api_base_url = os.environ["OPENAI_API_BASE"]
     if os.environ.get("AUTOISSUE_MODEL"):
         cfg.model = os.environ["AUTOISSUE_MODEL"]
+        cfg.models = [cfg.model]  # 同步更新列表
 
     return cfg
 
