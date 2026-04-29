@@ -113,6 +113,12 @@ autoissue review owner/repo --branch develop
 
 ---
 
+## 安全提示
+
+`.autoissue.json` 包含你的 API Key，**已被 `.gitignore` 忽略**，不会被提交到 Git 仓库。如果你 fork 了本项目，请确保不要将真实的 API Key 推送到公开仓库。
+
+---
+
 ## 环境变量
 
 可用环境变量覆盖配置文件中的 API 设置：
@@ -161,16 +167,42 @@ autoissue review <owner/repo> [选项]
 ## 项目结构
 
 ```
-autoissue/
+AutoIssueReviewer/
 ├── auto_issue/
-│   ├── __init__.py        # 包初始化
+│   ├── __init__.py        # 包初始化与公共 API 导出
 │   ├── cli.py             # CLI 入口与参数解析
-│   ├── config.py          # 配置管理
+│   ├── config.py          # 配置管理（Config 数据类 + load_config）
+│   ├── constants.py       # 版本号、重试参数、镜像源、语言映射、关键词
 │   ├── fetcher.py         # 仓库克隆与文件收集
-│   ├── reviewer.py        # AI 代码审查
-│   └── issue_creator.py   # GitHub Issue 提交
+│   ├── reviewer.py        # AI 代码审查（多 key/多模型自动切换）
+│   ├── issue_creator.py   # GitHub Issue 提交
+│   └── utils.py           # 工具函数（可执行文件查找、"无问题"检测）
+├── tests/
+│   ├── conftest.py        # 共享测试夹具
+│   ├── test_config.py     # 配置模块测试
+│   ├── test_fetcher.py    # 文件收集模块测试
+│   └── test_utils.py      # 工具函数测试
 ├── pyproject.toml         # 项目配置
+├── .gitignore             # 忽略规则（含 .autoissue.json）
 └── README.md              # 本文档
+```
+
+---
+
+## 测试
+
+```bash
+# 安装开发依赖
+pip install -e ".[dev]"
+
+# 运行全部测试
+pytest
+
+# 运行指定模块测试
+pytest tests/test_config.py
+
+# 查看覆盖率
+pytest --cov=auto_issue
 ```
 
 ---
