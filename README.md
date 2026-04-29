@@ -3,6 +3,14 @@
 [![Python](https://img.shields.io/badge/python-3.10+-blue)](https://python.org)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
+## ⚠️ 免责声明
+
+> - **请在虚拟环境中使用本工具**，以防第三方 API 中转站对传输的数据进行投毒或篡改。
+> - 本软件完全开源，**不含任何与开发者相关的云端处理逻辑**，所有数据处理均在本地完成。
+> - 使用第三方中转站 API 时，请确保其来源可靠，并注意保护您的 API Key 安全。
+
+---
+
 **AutoIssue** 是一个 CLI 工具，可以：
 
 1. 自动克隆指定 GitHub 仓库（支持公开和私有仓库）
@@ -19,7 +27,7 @@
 ```bash
 # 克隆本项目
 git clone https://github.com/Watanabehato/AutoIssueReviewer
-cd autoissue
+cd AutoIssueReviewer
 
 # 安装（推荐使用虚拟环境）
 pip install -e .
