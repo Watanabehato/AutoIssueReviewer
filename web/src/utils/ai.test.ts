@@ -80,6 +80,14 @@ describe('callAI', () => {
 
     await expect(callAI(config, 'system', 'user')).rejects.toThrow('缺少有效')
   })
+
+  it('explains browser CORS failures instead of exposing Failed to fetch', async () => {
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('Failed to fetch'))
+
+    await expect(callAI(config, 'system', 'user')).rejects.toThrow(
+      '允许 https://watanabehato.github.io 跨域请求'
+    )
+  })
 })
 
 describe('reviewFiles', () => {

@@ -46,23 +46,33 @@ export async function callAI(
   userPrompt: string
 ): Promise<string> {
   const apiBaseUrl = config.apiBaseUrl.replace(/\/+$/, '')
-  const response = await fetch(`${apiBaseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${config.apiKey}`,
-    },
-    body: JSON.stringify({
-      model: config.model,
-      messages: [
-        { role: 'system' as const, content: systemPrompt },
-        { role: 'user' as const, content: userPrompt },
-      ],
-      max_tokens: 4096,
-      temperature: 0.2,
-    }),
-    signal: AbortSignal.timeout(120_000),
-  })
+  let response: Response
+  try {
+    response = await fetch(`${apiBaseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${config.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: config.model,
+        messages: [
+          { role: 'system' as const, content: systemPrompt },
+          { role: 'user' as const, content: userPrompt },
+        ],
+        max_tokens: 4096,
+        temperature: 0.2,
+      }),
+      signal: AbortSignal.timeout(120_000),
+    })
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'TimeoutError') {
+      throw new Error(`AI API 请求超时：${apiBaseUrl}`)
+    }
+    throw new Error(
+      `无法从浏览器连接 AI API：${apiBaseUrl}。请确认服务可访问并允许 https://watanabehato.github.io 跨域请求（CORS）；不支持浏览器调用的服务请使用 CLI。`
+    )
+  }
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => null)

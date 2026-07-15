@@ -105,7 +105,7 @@ export function ReviewProgress({ status }: ReviewProgressProps) {
               <AlertCircle className="w-6 h-6" style={{ color: danger }} />
             </div>
             <h3 className="text-lg font-bold" style={{ color: textPrimary }}>分析失败</h3>
-            <p className="mt-2" style={{ color: danger, fontSize: '14px' }}>{status.error}</p>
+            <p className="mt-2 break-words" style={{ color: danger, fontSize: '14px' }}>{status.error}</p>
             <p className="mt-2" style={{ color: textMuted, fontSize: '13px' }}>
               {status.message}
             </p>

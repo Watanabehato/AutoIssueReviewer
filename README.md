@@ -63,6 +63,7 @@ autoissue review owner/repo --output report.md --no-issue
 ## 🔒 隐私设计
 
 - API Key 仅保存在当前页面内存中，**不会写入 localStorage、日志或仓库，只会发送到你配置的 AI API 服务**
+- Web 版要求 AI API 允许来自 `https://watanabehato.github.io` 的 CORS 请求；不支持浏览器跨域调用的兼容服务请使用 CLI
 - 关闭页面后 Key 将自动清除
 - 所有数据处理均在客户端完成，不经过任何中间服务器
 
