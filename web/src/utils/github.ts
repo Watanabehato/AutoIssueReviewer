@@ -1,6 +1,44 @@
 import type { ParsedRepoUrl, RepoInfo, CodeFile } from '@/types'
 
 const GITHUB_API_BASE = 'https://api.github.com'
+const JSDELIVR_DATA_BASE = 'https://data.jsdelivr.com/v1/package/gh'
+const JSDELIVR_CDN_BASE = 'https://cdn.jsdelivr.net/gh'
+
+type StructureItem = { path: string; type: 'file' | 'dir'; size?: number }
+
+const structureCache = new Map<string, StructureItem[]>()
+
+function repoKey(owner: string, repo: string, branch: string): string {
+  return `${owner}/${repo}@${branch}`
+}
+
+async function fetchJsDelivrStructure(
+  owner: string,
+  repo: string,
+  branch: string
+): Promise<StructureItem[]> {
+  const key = repoKey(owner, repo, branch)
+  const cached = structureCache.get(key)
+  if (cached) return cached
+
+  const response = await fetch(
+    `${JSDELIVR_DATA_BASE}/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}@${encodeURIComponent(branch)}/flat`
+  )
+  if (!response.ok) {
+    throw new Error(`Failed to fetch repository tree from jsDelivr: ${response.status}`)
+  }
+
+  const data = await response.json()
+  const structure: StructureItem[] = (data.files || []).map(
+    (item: { name: string; size?: number }) => ({
+      path: item.name.replace(/^\//, ''),
+      type: 'file' as const,
+      size: item.size,
+    })
+  )
+  structureCache.set(key, structure)
+  return structure
+}
 
 export function parseGithubUrl(url: string): ParsedRepoUrl {
   const trimmed = url.trim()
@@ -34,6 +72,19 @@ export async function fetchRepoInfo(owner: string, repo: string): Promise<RepoIn
     `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`
   )
   if (!response.ok) {
+    if (response.status === 403) {
+      await fetchJsDelivrStructure(owner, repo, 'HEAD')
+      return {
+        owner,
+        repo,
+        name: repo,
+        description: '',
+        language: 'Unknown',
+        stars: 0,
+        forks: 0,
+        defaultBranch: 'HEAD',
+      }
+    }
     throw new Error(`Failed to fetch repo info: ${response.status}`)
   }
 
@@ -54,11 +105,17 @@ export async function fetchRepoStructure(
   owner: string,
   repo: string,
   branch: string = 'main'
-): Promise<{ path: string; type: 'file' | 'dir'; size?: number }[]> {
+): Promise<StructureItem[]> {
+  const cached = structureCache.get(repoKey(owner, repo, branch))
+  if (cached) return cached
+
   const response = await fetch(
     `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/git/trees/${encodeURIComponent(branch)}?recursive=1`
   )
   if (!response.ok) {
+    if (response.status === 403) {
+      return fetchJsDelivrStructure(owner, repo, branch)
+    }
     throw new Error(`Failed to fetch repository tree: ${response.status}`)
   }
 
@@ -67,30 +124,25 @@ export async function fetchRepoStructure(
     throw new Error('Repository tree is too large for the GitHub API; please use the CLI version')
   }
 
-  return (data.tree || [])
+  const structure: StructureItem[] = (data.tree || [])
     .filter((item: { type: string }) => item.type === 'blob' || item.type === 'tree')
     .map((item: { path: string; type: 'blob' | 'tree'; size?: number }) => ({
       path: item.path,
       type: item.type === 'blob' ? 'file' as const : 'dir' as const,
       size: item.size,
     }))
+  structureCache.set(repoKey(owner, repo, branch), structure)
+  return structure
 }
 
 export async function fetchFileContent(owner: string, repo: string, filePath: string, branch: string): Promise<string> {
   const response = await fetch(
-    `${GITHUB_API_BASE}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${encodePath(filePath)}?ref=${encodeURIComponent(branch)}`
+    `${JSDELIVR_CDN_BASE}/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}@${encodeURIComponent(branch)}/${encodePath(filePath)}`
   )
   if (!response.ok) {
     throw new Error(`Failed to fetch file: ${response.status}`)
   }
-
-  const data = await response.json()
-  if (data.content) {
-    const binary = atob(data.content.replace(/\s/g, ''))
-    const bytes = Uint8Array.from(binary, char => char.charCodeAt(0))
-    return new TextDecoder().decode(bytes)
-  }
-  throw new Error('File content not available')
+  return response.text()
 }
 
 function encodePath(path: string): string {

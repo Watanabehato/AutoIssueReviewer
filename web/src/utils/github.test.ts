@@ -1,4 +1,4 @@
-import { parseGithubUrl, detectLanguage, fetchFileContent, fetchRepoStructure, shouldExclude } from './github'
+import { parseGithubUrl, detectLanguage, fetchFileContent, fetchRepoInfo, fetchRepoStructure, shouldExclude } from './github'
 
 describe('parseGithubUrl', () => {
   it('should parse full HTTPS URL', () => {
@@ -72,15 +72,33 @@ describe('GitHub API requests', () => {
 
   it('decodes UTF-8 base64 file content without mojibake', async () => {
     const original = '你好，RepoLens!'
-    const bytes = new TextEncoder().encode(original)
-    const base64 = btoa(String.fromCharCode(...bytes))
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,
-      json: async () => ({ content: base64 }),
+      text: async () => original,
     } as Response)
 
     await expect(fetchFileContent('owner', 'repo', '文档/a b.md', 'feature/i18n'))
       .resolves.toBe(original)
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://cdn.jsdelivr.net/gh/owner/repo@feature%2Fi18n/%E6%96%87%E6%A1%A3/a%20b.md'
+    )
+  })
+
+  it('falls back to jsDelivr when the anonymous GitHub rate limit is exhausted', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce({ ok: false, status: 403 } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ files: [{ name: '/src/deep/file.ts', size: 12 }] }),
+      } as Response)
+
+    await expect(fetchRepoInfo('limited-owner', 'limited-repo')).resolves.toMatchObject({
+      owner: 'limited-owner', repo: 'limited-repo', defaultBranch: 'HEAD',
+    })
+    await expect(fetchRepoStructure('limited-owner', 'limited-repo', 'HEAD')).resolves.toEqual([
+      { path: 'src/deep/file.ts', type: 'file', size: 12 },
+    ])
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 })
 
