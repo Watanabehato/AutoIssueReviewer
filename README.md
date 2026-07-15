@@ -1,219 +1,203 @@
-# AutoIssue — AI 驱动的 GitHub 代码审查工具
+# RepoLens AI — GitHub 代码质量智能分析
 
 [![Python](https://img.shields.io/badge/python-3.10+-blue)](https://python.org)
+[![TypeScript](https://img.shields.io/badge/typescript-5.8+-blue)](https://typescriptlang.org)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-## ⚠️ 免责声明
+## 🎯 产品定位
 
-> - **请在虚拟环境中使用本工具**，以防第三方 API 中转站对传输的数据进行投毒或篡改。
-> - 本软件完全开源，**不含任何与开发者相关的云端处理逻辑**，所有数据处理均在本地完成。
-> - 使用第三方中转站 API 时，请确保其来源可靠，并注意保护您的 API Key 安全。
+帮助个人开发者和小团队快速理解 GitHub 仓库的代码质量、安全风险和改进优先级。
 
----
+## ✨ 核心功能
 
-**AutoIssue** 是一个 CLI 工具，可以：
+### 🖥️ Web Demo（无需安装）
+- 输入公开 GitHub 仓库地址，一键分析代码质量
+- **示例模式**：无需 API Key，打开即可完整体验
+- **实时 AI 审查**：使用 OpenAI 兼容接口进行代码分析
+- 审查结果包括：仓库健康度评分、高/中/低优先级问题、安全风险、可维护性问题、测试覆盖建议
+- 一键复制 GitHub Issue 格式的审查报告
 
-1. 自动克隆指定 GitHub 仓库（支持公开和私有仓库）
-2. 遍历仓库内所有代码文件
-3. 调用 **任何 OpenAI 兼容 API**（包括第三方中转站）进行 AI 代码审查
-4. 将审查结果汇总后，自动提交为 GitHub Issue
+### 🧰 CLI 工具（批量审查）
+- 支持批量审查多个仓库
+- 自动提交审查结果为 GitHub Issue
+- 支持多 API Key/多模型自动切换
+- 详细的配置选项和命令行参数
 
----
+## 🚀 快速开始
 
-## 快速开始
+### Web Demo
 
-### 1. 安装依赖
+直接访问 GitHub Pages 部署的 Web 应用：
+
+```
+https://watanabehato.github.io/AutoIssueReviewer
+```
+
+**或本地运行：**
 
 ```bash
-# 克隆本项目
-git clone https://github.com/Watanabehato/AutoIssueReviewer
-cd AutoIssueReviewer
+cd web
+npm install
+npm run dev
+```
 
-# 安装（推荐使用虚拟环境）
+### CLI 工具
+
+```bash
+# 安装
 pip install -e .
-```
 
-### 2. 生成配置文件
-
-```bash
+# 初始化配置
 autoissue init
+
+# 审查仓库
+autoissue review owner/repo
+
+# 预览模式（不提交 Issue）
+autoissue review owner/repo --dry-run
+
+# 将报告保存为 Markdown
+autoissue review owner/repo --output report.md --no-issue
 ```
 
-这会在当前目录生成 `.autoissue.json`，编辑它填入你的 API 信息：
+## 🔒 隐私设计
+
+- API Key 仅保存在当前页面内存中，**不会写入 localStorage、日志或仓库，只会发送到你配置的 AI API 服务**
+- 关闭页面后 Key 将自动清除
+- 所有数据处理均在客户端完成，不经过任何中间服务器
+
+## 📊 审查维度
+
+1. **Bug 与逻辑错误**：潜在的运行时错误、边界条件、空指针等
+2. **安全漏洞**：SQL 注入、XSS、硬编码密钥、不安全的依赖等
+3. **代码质量**：可读性差、重复代码、过长函数、命名不规范等
+4. **性能问题**：低效算法、N+1 查询、内存泄漏等
+5. **最佳实践**：违反语言惯用法、缺少错误处理、缺少注释等
+6. **测试覆盖**：是否有单元测试、测试覆盖率如何
+
+## 📁 项目结构
+
+```
+AutoIssueReviewer/
+├── auto_issue/              # CLI 工具核心代码
+│   ├── __init__.py
+│   ├── cli.py               # CLI 入口
+│   ├── config.py            # 配置管理
+│   ├── constants.py         # 常量定义
+│   ├── fetcher.py           # 仓库克隆与文件收集
+│   ├── reviewer.py          # AI 代码审查
+│   ├── issue_creator.py     # GitHub Issue 提交
+│   └── utils.py             # 工具函数
+├── web/                     # Web Demo（React + Vite）
+│   ├── src/
+│   │   ├── components/      # React 组件
+│   │   ├── data/            # 示例数据
+│   │   ├── types/           # TypeScript 类型定义
+│   │   ├── utils/           # 工具函数（GitHub API、AI 调用、Markdown 生成）
+│   │   ├── App.tsx          # 主应用
+│   │   └── main.tsx         # 入口文件
+│   ├── package.json
+│   ├── vite.config.ts
+│   └── vitest.config.ts
+├── tests/                   # Python 测试
+├── .github/workflows/       # GitHub Actions 工作流
+│   └── pages.yml            # GitHub Pages 自动部署
+├── pyproject.toml
+└── README.md
+```
+
+## 🔧 配置说明
+
+### Web Demo AI 配置
+
+在 Web 界面中输入以下配置：
+- **API Base URL**：OpenAI 兼容接口地址，默认 `https://api.openai.com/v1`
+- **API Key**：你的 API Key
+- **模型名称**：如 `gpt-4o`
+
+### CLI 配置文件
+
+编辑 `.autoissue.json`：
 
 ```json
 {
-  "api_base_url": "https://your-api-proxy.com/v1",
+  "api_base_url": "https://api.openai.com/v1",
   "api_key": "sk-xxxxxxxxxxxxxxxx",
   "model": "gpt-4o",
   "max_tokens": 4096,
   "review_language": "zh",
-  "issue_title_prefix": "[AutoReview]",
-  "issue_labels": ["automated-review"]
-}
-```
-
-#### 多 Key / 多模型支持
-
-当配置多个 `api_keys` 和 `models` 时，AutoIssue 会自动切换：
-- 任一 key 或模型报错（如 401/403/504 等）时，自动切换到下一个组合
-- 组合循环：每个 key 会和每个模型配对
-
-```json
-{
-  "api_base_url": "https://cdnapi.xcode.best/v1",
-  "api_keys": [
-    "sk-key1-xxxxxxxxxxxxxxxx",
-    "sk-key2-xxxxxxxxxxxxxxxx"
+  "exclude_patterns": [
+    "*.lock", "node_modules/*", ".git/*", "dist/*"
   ],
-  "models": [
-    "claude-haiku-4-5-20251001",
-    "gpt-4o-mini"
-  ]
+  "max_file_size_kb": 200,
+  "max_files_per_batch": 10,
+  "max_repo_files": 200
 }
 ```
 
-此配置会生成 4 种组合：`(key1, claude)` / `(key1, gpt-4o-mini)` / `(key2, claude)` / `(key2, gpt-4o-mini)`
+## 🧪 测试
 
-### 3. 检查环境
-
-```bash
-autoissue check
-```
-
-### 4. 开始审查！
+### Python 测试
 
 ```bash
-# 审查公开仓库，提交 Issue
-autoissue review owner/repo
-
-# 只预览报告，不实际提交 Issue（测试用）
-autoissue review owner/repo --dry-run
-
-# 将报告保存为 Markdown 文件
-autoissue review owner/repo --output report.md --no-issue
-
-# 指定分支
-autoissue review owner/repo --branch develop
-```
-
----
-
-## 配置参数说明
-
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `api_base_url` | `https://api.openai.com/v1` | API 中转站地址 |
-| `api_key` | *(必填)* | API Key（兼容单 key） |
-| `api_keys` | `[]` | 多 Key 列表，支持逗号分隔字符串，自动切换 |
-| `model` | `gpt-4o` | 模型（兼容单模型） |
-| `models` | `[]` | 多模型列表，支持逗号分隔字符串，自动切换 |
-| `max_tokens` | `4096` | 每次 API 调用最大 token 数 |
-| `review_language` | `zh` | 审查语言：`zh`=中文，`en`=英文 |
-| `exclude_patterns` | *(见默认值)* | 排除的文件 glob 模式列表 |
-| `max_file_size_kb` | `200` | 超过此大小的文件跳过（KB） |
-| `max_files_per_batch` | `10` | 每批发给 AI 的文件数 |
-| `max_repo_files` | `200` | 最多处理的文件总数 |
-| `batch_delay_seconds` | `5.0` | 相邻批次之间的等待秒数 |
-| `issue_title_prefix` | `[AutoReview]` | Issue 标题前缀 |
-| `issue_labels` | `["automated-review"]` | Issue 标签（需提前在仓库创建） |
-| `add_summary` | `true` | 是否在 Issue 头部加总结 |
-
----
-
-## 安全提示
-
-`.autoissue.json` 包含你的 API Key，**已被 `.gitignore` 忽略**，不会被提交到 Git 仓库。如果你 fork 了本项目，请确保不要将真实的 API Key 推送到公开仓库。
-
----
-
-## 环境变量
-
-可用环境变量覆盖配置文件中的 API 设置：
-
-| 环境变量 | 对应配置 |
-|----------|----------|
-| `OPENAI_API_KEY` | `api_key` |
-| `OPENAI_API_BASE` | `api_base_url` |
-| `AUTOISSUE_MODEL` | `model` |
-
----
-
-## CLI 完整参数
-
-```
-autoissue review <owner/repo> [选项]
-
-选项：
-  --branch, -b     指定分支（默认：仓库默认分支）
-  --config, -c     指定配置文件路径
-  --dry-run, -n    预览模式，不实际提交 Issue
-  --verbose, -v    详细输出（显示跳过的文件）
-  --output, -o     将报告保存为 Markdown 文件
-  --no-issue       不提交 Issue（配合 --output）
-  --api-key        临时指定 API Key
-  --api-base       临时指定 API Base URL
-  --model          临时指定模型
-  --lang           审查语言（zh/en）
-```
-
----
-
-## 常见问题
-
-**Q: 提示 "创建 Issue 失败：label not found"**
-> 需要先在 GitHub 仓库的 Issues → Labels 中手动创建 `automated-review` 标签，或在配置中清空 `issue_labels`。
-
-**Q: 如何审查私有仓库？**
-> 确保已运行 `gh auth login` 并完成授权，AutoIssue 会自动使用 gh 的认证信息克隆私有仓库。
-
-**Q: 仓库文件太多，审查太慢？**
-> 调低 `max_repo_files`（如 50），或增加 `exclude_patterns` 来跳过测试文件、文档等。
-
----
-
-## 项目结构
-
-```
-AutoIssueReviewer/
-├── auto_issue/
-│   ├── __init__.py        # 包初始化与公共 API 导出
-│   ├── cli.py             # CLI 入口与参数解析
-│   ├── config.py          # 配置管理（Config 数据类 + load_config）
-│   ├── constants.py       # 版本号、重试参数、镜像源、语言映射、关键词
-│   ├── fetcher.py         # 仓库克隆与文件收集
-│   ├── reviewer.py        # AI 代码审查（多 key/多模型自动切换）
-│   ├── issue_creator.py   # GitHub Issue 提交
-│   └── utils.py           # 工具函数（可执行文件查找、"无问题"检测）
-├── tests/
-│   ├── conftest.py        # 共享测试夹具
-│   ├── test_config.py     # 配置模块测试
-│   ├── test_fetcher.py    # 文件收集模块测试
-│   └── test_utils.py      # 工具函数测试
-├── pyproject.toml         # 项目配置
-├── .gitignore             # 忽略规则（含 .autoissue.json）
-└── README.md              # 本文档
-```
-
----
-
-## 测试
-
-```bash
-# 安装开发依赖
-pip install -e ".[dev]"
-
-# 运行全部测试
+pip install -e ".[test]"
 pytest
-
-# 运行指定模块测试
-pytest tests/test_config.py
-
-# 查看覆盖率
-pytest --cov=auto_issue
 ```
 
----
+### Web 测试
+
+```bash
+cd web
+npm run test:run
+```
+
+## 🚀 部署
+
+### GitHub Pages
+
+项目已配置自动部署工作流，推送到 `main` 分支后自动部署到 GitHub Pages。
+
+**手动部署步骤：**
+
+1. 在 GitHub 仓库设置中开启 GitHub Pages
+2. 选择 `GitHub Actions` 作为源
+3. 推送代码到 `main` 分支
+
+### 环境变量（可选）
+
+| 环境变量 | 说明 |
+|----------|------|
+| `OPENAI_API_KEY` | API Key（CLI 模式） |
+| `OPENAI_API_BASE` | API Base URL（CLI 模式） |
+| `AUTOISSUE_MODEL` | 模型名称（CLI 模式） |
+
+## 💡 使用建议
+
+1. **示例模式**：点击"体验示例"按钮即可查看完整功能演示
+2. **实时审查**：准备好 OpenAI 兼容的 API Key 后，输入仓库地址开始分析
+3. **大型仓库**：建议设置合理的文件数量限制，避免 API 超时
+4. **隐私保护**：不要在公共环境中输入真实 API Key
+
+## 📝 更新日志
+
+### v2.0.0 - Web Demo 版本
+- 新增纯前端 Web 应用，支持部署到 GitHub Pages
+- 添加示例模式，无需 API Key 即可体验
+- 新增实时 AI 审查模式，支持 OpenAI 兼容接口
+- 新增仓库健康度评分系统
+- 新增问题优先级分类（高/中/低）
+- 新增安全风险和可维护性分析
+- 新增测试覆盖建议
+- 新增 Issue Markdown 一键复制功能
+- 添加完整的 TypeScript 类型定义
+- 添加 26 个单元测试
+- 支持响应式布局（桌面和手机）
+
+### v1.0.0 - CLI 版本
+- 初始版本，支持 CLI 命令行工具
+- 自动克隆 GitHub 仓库
+- 调用 OpenAI API 进行代码审查
+- 自动提交审查结果为 GitHub Issue
 
 ## License
 

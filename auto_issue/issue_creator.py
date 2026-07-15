@@ -8,6 +8,8 @@ from typing import Optional
 
 from .config import Config
 
+MAX_ISSUE_BODY_CHARS = 65_000
+
 
 def _get_gh_executable() -> str:
     """获取 gh 可执行文件路径，优先用完整路径以避免 PATH 问题"""
@@ -24,14 +26,17 @@ def _get_gh_executable() -> str:
 
 def _run_gh(args: list[str], input_text: Optional[str] = None) -> subprocess.CompletedProcess:
     """运行 gh CLI 命令"""
-    result = subprocess.run(
-        [_get_gh_executable()] + args,
-        input=input_text,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-    )
-    return result
+    command = [_get_gh_executable()] + args
+    try:
+        return subprocess.run(
+            command,
+            input=input_text,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        )
+    except FileNotFoundError as error:
+        return subprocess.CompletedProcess(command, 127, "", str(error))
 
 
 def check_gh_auth() -> bool:
@@ -59,6 +64,7 @@ def build_issue_body(
     file_count: int,
     config: Config,
     include_details: bool = True,
+    truncate: bool = True,
 ) -> str:
     """构建 Issue 正文 Markdown"""
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -110,6 +116,11 @@ def build_issue_body(
             )
 
     body += footer
+    if truncate and len(body) > MAX_ISSUE_BODY_CHARS:
+        notice = "\n\n> 报告内容过长，已截断；请使用 `--output` 保存完整报告。"
+        if config.review_language == "en":
+            notice = "\n\n> Report truncated due to GitHub's size limit; use `--output` for the full report."
+        body = body[:MAX_ISSUE_BODY_CHARS - len(notice)] + notice
     return body
 
 
@@ -127,7 +138,7 @@ def create_issue(
     """
     if dry_run:
         print("\n" + "=" * 60)
-        print(f"[DRY RUN] 将创建 Issue：")
+        print("[DRY RUN] 将创建 Issue：")
         print(f"  仓库: {repo}")
         print(f"  标题: {title}")
         if labels:
@@ -139,7 +150,7 @@ def create_issue(
         "issue", "create",
         "--repo", repo,
         "--title", title,
-        "--body", body,
+        "--body-file", "-",
     ]
 
     if labels:
@@ -147,15 +158,15 @@ def create_issue(
         args += ["--label", ",".join(labels)]
 
     print(f"  正在提交 Issue 到 {repo} ...")
-    result = _run_gh(args)
+    result = _run_gh(args, input_text=body)
 
     if result.returncode != 0:
         err = result.stderr.strip()
         # 如果是标签不存在的错误，去掉标签重试
         if "label" in err.lower() and labels:
-            print(f"  [警告] 标签不存在，将不附加标签重试...")
+            print("  [警告] 标签不存在，将不附加标签重试...")
             args_no_label = [a for a in args if a not in ["--label", ",".join(labels)]]
-            result = _run_gh(args_no_label)
+            result = _run_gh(args_no_label, input_text=body)
             if result.returncode != 0:
                 raise RuntimeError(f"创建 Issue 失败：{result.stderr.strip()}")
         else:

@@ -1,9 +1,7 @@
 """GitHub 仓库代码获取模块：克隆仓库并读取代码文件"""
 
 import os
-import shutil
 import subprocess
-import tempfile
 import fnmatch
 from pathlib import Path
 from typing import Generator, Optional
@@ -62,28 +60,21 @@ def _detect_language(file_path: str) -> str:
 
 def _should_exclude(rel_path: str, patterns: list) -> bool:
     """检查文件是否应该被排除"""
+    rel_path = rel_path.replace("\\", "/")
+    parts = Path(rel_path).parts
     for pattern in patterns:
-        if fnmatch.fnmatch(rel_path, pattern):
+        normalized_pattern = pattern.replace("\\", "/")
+        if fnmatch.fnmatch(rel_path, normalized_pattern):
             return True
         # 也匹配仅文件名
-        if fnmatch.fnmatch(Path(rel_path).name, pattern):
+        if fnmatch.fnmatch(Path(rel_path).name, normalized_pattern):
             return True
-        # 目录匹配
-        parts = Path(rel_path).parts
-        for i in range(len(parts)):
-            partial = str(Path(*parts[:i+1]))
-            if fnmatch.fnmatch(partial + "/", pattern) or fnmatch.fnmatch(partial + "/*", pattern):
-                pass
-        # 简单目录前缀匹配
-        pattern_clean = pattern.rstrip("/*")
-        if "/" in pattern or "*" in pattern:
-            if fnmatch.fnmatch(rel_path, pattern.replace("/*", "/**")):
-                return True
-            # 检查路径的任意前缀
-            for i in range(len(parts) - 1):
-                prefix = "/".join(parts[:i+1])
-                if fnmatch.fnmatch(prefix, pattern_clean):
-                    return True
+        # "node_modules/*" 这类规则也应匹配任意深度的同名目录。
+        directory_pattern = normalized_pattern.removesuffix("/*")
+        if normalized_pattern.endswith("/*") and any(
+            fnmatch.fnmatch(part, directory_pattern) for part in parts[:-1]
+        ):
+            return True
     return False
 
 
@@ -181,5 +172,7 @@ def batch_files(
     batch_size: int,
 ) -> Generator[list[CodeFile], None, None]:
     """将文件列表按批次产出"""
+    if batch_size <= 0:
+        raise ValueError("batch_size must be greater than zero")
     for i in range(0, len(files), batch_size):
         yield files[i: i + batch_size]

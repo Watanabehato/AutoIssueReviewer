@@ -1,8 +1,6 @@
 """测试配置管理模块"""
 
 import json
-import os
-import pytest
 from pathlib import Path
 from auto_issue.config import Config, load_config
 

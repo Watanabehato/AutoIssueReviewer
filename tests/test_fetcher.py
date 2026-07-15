@@ -1,7 +1,5 @@
 """测试代码获取模块"""
 
-import pytest
-from pathlib import Path
 from auto_issue.fetcher import (
     CodeFile,
     _detect_language,
@@ -43,6 +41,7 @@ class TestShouldExclude:
 
     def test_exclude_node_modules(self):
         assert _should_exclude("node_modules/pkg/index.js", ["node_modules/*"]) is True
+        assert _should_exclude("frontend/node_modules/pkg/index.js", ["node_modules/*"]) is True
 
     def test_exclude_git_dir(self):
         assert _should_exclude(".git/config", [".git/*"]) is True
@@ -84,6 +83,12 @@ class TestBatchFiles:
         """空列表 → 0 批"""
         batches = list(batch_files([], 5))
         assert len(batches) == 0
+
+    def test_invalid_batch_size(self):
+        import pytest
+
+        with pytest.raises(ValueError, match="greater than zero"):
+            list(batch_files([], 0))
 
 
 class TestCollectCodeFiles:

@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=42", "wheel"]
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,10 +8,17 @@ version = "1.0.0"
 description = "AI 驱动的 GitHub 代码审查 CLI 工具，自动审查仓库代码并提交 Issue"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
+license = "MIT"
 keywords = ["code-review", "github", "ai", "cli", "openai"]
 dependencies = [
     "openai>=1.0.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "ruff>=0.9",
 ]
 
 [project.scripts]

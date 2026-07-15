@@ -2,7 +2,8 @@
 
 import time
 import itertools
-from typing import Optional
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from openai import OpenAI, APIError, RateLimitError, APIConnectionError
 
 from .config import Config
@@ -50,6 +51,19 @@ BATCH_USER_PROMPT_EN = """Please review the following {count} code files:
 
 ---
 Please output all issues found."""
+
+MAX_CHARS_PER_FILE = 12_000
+
+
+def _retry_after_seconds(value: str) -> int:
+    """Parse Retry-After as delta seconds or an HTTP date."""
+    try:
+        return max(0, int(float(value)))
+    except (TypeError, ValueError):
+        retry_at = parsedate_to_datetime(value)
+        if retry_at.tzinfo is None:
+            retry_at = retry_at.replace(tzinfo=timezone.utc)
+        return max(0, int((retry_at - datetime.now(timezone.utc)).total_seconds()))
 
 SUMMARY_PROMPT_ZH = """以下是对仓库 `{repo}` 所有代码文件的分批审查结果：
 
@@ -138,9 +152,13 @@ class CodeReviewer:
                     )
                     return response.choices[0].message.content.strip()
                 except RateLimitError:
-                    wait = 2 ** attempt * 10
-                    print(f"  [限流] {model_desc} 等待 {wait}s 后重试...")
-                    time.sleep(wait)
+                    if attempt < retries - 1:
+                        wait = 2 ** attempt * 10
+                        print(f"  [限流] {model_desc} 等待 {wait}s 后重试...")
+                        time.sleep(wait)
+                    else:
+                        print(f"  [限流] {model_desc} 重试耗尽，尝试切换模型...")
+                        break
                 except APIConnectionError as e:
                     if attempt < retries - 1:
                         print(f"  [连接错误] {model_desc} {e}，5s 后重试...")
@@ -153,13 +171,13 @@ class CodeReviewer:
                     retry_after = getattr(e, "response", None) and getattr(e.response, "headers", None) and \
                                   e.response.headers.get("retry-after")
                     if retry_after:
-                        wait = int(retry_after)
+                        wait = _retry_after_seconds(retry_after)
                     else:
                         wait = 2 ** attempt * 30   # 指数退避
 
                     # 判断是否为不可重试的错误（如 401/403/404）
                     status = getattr(e, "status_code", None)
-                    no_retry = status in (401, 403, 404)
+                    no_retry = status is not None and 400 <= status < 500 and status not in (408, 409, 429)
 
                     if no_retry or attempt >= retries - 1:
                         # 提取错误信息
@@ -203,9 +221,12 @@ class CodeReviewer:
         """将文件列表格式化为 Prompt 中的代码块"""
         parts = []
         for f in files:
+            content = f.content
+            if len(content) > MAX_CHARS_PER_FILE:
+                content = content[:MAX_CHARS_PER_FILE] + "\n... [内容已截断]"
             parts.append(
                 f"### 文件：`{f.path}` ({f.language})\n"
-                f"```{f.language.lower()}\n{f.content}\n```"
+                f"```{f.language.lower()}\n{content}\n```"
             )
         return "\n\n".join(parts)
 

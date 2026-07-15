@@ -98,7 +98,7 @@ def build_parser() -> argparse.ArgumentParser:
     review_p.add_argument(
         "--config", "-c",
         default=None,
-        help=f"配置文件路径（默认自动搜索 .autoissue.json）",
+        help="配置文件路径（默认自动搜索 .autoissue.json）",
     )
     review_p.add_argument(
         "--dry-run", "-n",
@@ -159,7 +159,7 @@ def cmd_init(args: argparse.Namespace):
     target.write_text(generate_sample_config(), encoding="utf-8")
     print(f"{GREEN}[OK] 已生成配置文件：{target}{RESET}")
     print("\n请编辑该文件，填入你的 API Key 和 Base URL，然后运行：")
-    print(f"  autoissue review owner/repo\n")
+    print("  autoissue review owner/repo\n")
 
 
 def cmd_check(args: argparse.Namespace):
@@ -224,6 +224,7 @@ def cmd_review(args: argparse.Namespace):
 
     # 0. 交互式收集仓库信息
     repo = args.repo
+    interactive_repo = not repo
     if not repo:
         print("=" * 50)
         repo = input("请输入要审查的 GitHub 仓库 (owner/repo)：").strip()
@@ -232,7 +233,7 @@ def cmd_review(args: argparse.Namespace):
             sys.exit(1)
 
     branch = args.branch
-    if not branch:
+    if interactive_repo and not branch:
         branch_input = input("请输入要审查的分支（直接回车使用默认分支）：").strip()
         branch = branch_input if branch_input else None
 
@@ -242,15 +243,24 @@ def cmd_review(args: argparse.Namespace):
     cfg: Config = load_config(args.config)
 
     # 命令行参数覆盖
-    if args.api_key:   cfg.api_key       = args.api_key
-    if args.api_base:  cfg.api_base_url  = args.api_base
-    if args.model:     cfg.model         = args.model
-    if args.lang:      cfg.review_language = args.lang
+    if args.api_key:
+        cfg.api_key = args.api_key
+        cfg.api_keys = [args.api_key]
+    if args.api_base:
+        cfg.api_base_url = args.api_base
+    if args.model:
+        cfg.model = args.model
+        cfg.models = [args.model]
+    if args.lang:
+        cfg.review_language = args.lang
 
     # 校验必要配置
-    if not cfg.api_key:
+    if not cfg.api_keys and not cfg.api_key:
         print(f"{RED}❌ 未设置 API Key！{RESET}")
         print("请在 .autoissue.json 中设置 api_key，或设置环境变量 OPENAI_API_KEY。")
+        sys.exit(1)
+    if cfg.max_files_per_batch <= 0:
+        print(f"{RED}❌ max_files_per_batch 必须大于 0。{RESET}")
         sys.exit(1)
 
     print(f"  API Base URL : {cfg.api_base_url}")
@@ -283,11 +293,12 @@ def cmd_review(args: argparse.Namespace):
             out_path = Path(args.output)
             from .issue_creator import build_issue_body
             full_report = build_issue_body(
-                repo=args.repo,
+                repo=repo,
                 summary=summary,
                 batch_reviews=batch_reviews,
                 file_count=len(files),
                 config=cfg,
+                truncate=False,
             )
             out_path.write_text(full_report, encoding="utf-8")
             print(f"  {GREEN}[OK] 报告已保存：{out_path}{RESET}")
@@ -305,7 +316,7 @@ def cmd_review(args: argparse.Namespace):
             if url:
                 print(f"\n{GREEN}{BOLD}[完成] Issue 地址：{url}{RESET}")
         else:
-            print(f"  [--no-issue] 已跳过 Issue 提交。")
+            print("  [--no-issue] 已跳过 Issue 提交。")
 
     finally:
         # 清理临时目录
